@@ -2,7 +2,7 @@ from numba import cuda
 import numpy
 from PIL import Image
 import time
- 
+
 
 #importing and formatting image datatype
 img = Image.open("720pcar.jpg")
