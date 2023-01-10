@@ -7,7 +7,7 @@ import copy
 #built for 720 x 480 image
 
 #importing and formatting image datatype
-img = Image.open("mugs/IMG_3919.jpg")
+img = Image.open("mugs/IMG_3915.jpg")
 img = img.convert("L")
 
 
@@ -44,6 +44,12 @@ def line_detect(img_array,weighting,f_img_array):
                 f_img_array[height][width+2] = 0
         
 
+
+
+
+
+
+
 threadsperblock = img.width
 blockspergrid = 1
 
@@ -75,29 +81,47 @@ image = Image.fromarray(f_img_array)
 image.show()
 
 
-     
-def circle_detect_l_to_r(f_img_array,possible_circles):
 
-    min_radius = 35
-    
-    for height in range(2,478):
-        for width in range(2,718-min_radius):
+
+######
+
+
+@cuda.jit('void(int16[:,:],int16[:,:])')
+def circle_detect_l_r(f_img_array,possible_circles):
+    height = cuda.grid(1)
+    if height < 479:
+        for width in range(2,718-20):
             if f_img_array[height][width] == 254:
                 b = False
-                checking_width = width + min_radius
-                for checking_up_height in range(min_radius,(478-height)):
+                checking_width = width + 20
+                for checking_up_height in range(20,(478-height)):
                     if f_img_array[height+checking_up_height][checking_width] == 254 and b == False:
                         if height + checking_up_height < 478:
-                            for checking_down_height in range(-2,2):
+                            for checking_down_height in range(-5,5):
                                 if f_img_array[(height-checking_up_height)+checking_down_height][checking_width] == 254 and b == False:
                                     if width < 410:
-                                        possible_circles = numpy.append(possible_circles,[[width,height]])
+                                        possible_circles[height][width] = 1
                                         b = True
-    return possible_circles
 
 
-possible_circles = numpy.array([],dtype=numpy.int16)
 
-possible_circles = circle_detect_l_to_r(f_img_array,possible_circles)
 
-print(possible_circles)
+threadsperblock = 476
+print("t1")
+
+min_radius = numpy.array([35,35],dtype = numpy.int16)
+possible_circles = numpy.zeros((480,720), dtype = numpy.int16)
+
+cuda.all_sync
+circle_detect_l_r[blockspergrid, threadsperblock](f_img_array,possible_circles)
+cuda.all_sync
+
+#searching for the ones
+possible_circles_l_r = []
+for j in range(480):
+    for i in range(720):
+        if possible_circles[j][i] == 1:
+            possible_circles_l_r.append([i,j])
+
+
+print(possible_circles_l_r)

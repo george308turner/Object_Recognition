@@ -7,7 +7,7 @@ import copy
 #built for 720 x 480 image
 
 #importing and formatting image datatype
-img = Image.open("mugs/IMG_3915.jpg")
+img = Image.open("mugs/IMG_3914.jpg")
 img = img.convert("L")
 
 
@@ -84,8 +84,6 @@ image.show()
 
 
 ######
-
-
 @cuda.jit('void(int16[:,:],int16[:,:])')
 def circle_detect_l_r(f_img_array,possible_circles):
     height = cuda.grid(1)
