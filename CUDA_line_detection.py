@@ -49,17 +49,18 @@ def line_detect(img_array,weighting): #og_img_array,img_array,weighting
 threadsperblock = img.width
 blockspergrid = 1
 
+
+
 s_time = time.time()
 
 cuda.all_sync
 colour_filtering[blockspergrid, threadsperblock](img_array)
 cuda.all_sync
 
-cuda.cudaDeviceReset()
+
 #end of black and white converstion
 
 
-og_img_array = copy.deepcopy(img_array) 
 
 #vertical line detection
 weighting = numpy.array([[1,2,0,-2,-1],[2,4,0,-4,-2],[3,12,0,-12,3],[2,4,0,-4,-2],[1,2,-0,-2,-1]],dtype=numpy.uint8)
