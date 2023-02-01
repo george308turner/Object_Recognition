@@ -4,15 +4,18 @@ from PIL import Image
 import time
 import copy
 
+#best values so far
+#23, 4, 185, 7000
+
 #kind of a minimum radius but any circles with a diameter smaller than this could be picked up
-min_radius = numpy.int16(20)
+min_radius = numpy.int16(23)
 
 #the deviation of where the white pixel on the oppposite side of the elipsis can be
 expected_range = numpy.int8(4)
 
-white_sensitivity = numpy.uint8(220)
+white_sensitivity = numpy.uint8(185)
 
-min_contrast = numpy.int16(5000)
+min_contrast = numpy.int16(7000)
 
 #built for 720 x 480 image
 
@@ -117,6 +120,34 @@ def circle_detect_b_t(f_img_array,possible_circles,min_radius,expected_range):
                                     if height < 770:
                                         possible_circles[width] = height
 
+def reject_outliers_average(data, m=100):
+    sum_i = 0
+    sum_j = 0
+    length = len(data)
+    for index in range(length):
+        sum_i += data[index][0]
+        sum_j += data[index][1]
+    mean_i = sum_i // length
+    mean_j = sum_j // length
+
+    num_rejected = 0
+    max_i = mean_i + m
+    min_i = mean_i - m
+    max_j = mean_j + m
+    min_j = mean_j - m
+    for index in range(length):
+        if data[index-num_rejected][0] < min_i or data[index-num_rejected][0] > max_i or data[index-num_rejected][1] < min_j or data[index-num_rejected][1] > max_j:
+            data = numpy.delete(data,index-num_rejected,0)
+            num_rejected += 1
+
+    length = len(data)
+    for index in range(length):
+        sum_i += data[index][0]
+        sum_j += data[index][1]
+    mean_i = sum_i // length
+    mean_j = sum_j // length
+
+    return (mean_i,mean_j)
 
 #Matching lines horizontal
 #@cuda.jit('void()')
@@ -160,10 +191,10 @@ cuda.all_sync
 circle_detect_l_r[blockspergrid, threadsperblock](f_img_array,possible_circles,min_radius,expected_range)
 cuda.all_sync
 #searching for the ones
-possible_circles_l_r = numpy.array([],dtype = numpy.uint8)
+possible_circles_l_r = numpy.array([[0,0]],dtype = numpy.uint8)
 for j in range(480):
     if possible_circles[j] != 0:
-        possible_circles_l_r = numpy.append(possible_circles_l_r,[possible_circles[j],j])
+        possible_circles_l_r = numpy.append(possible_circles_l_r,[[possible_circles[j],j]],axis=0)
 
 #array for all the possible circles to be added to
 #format added to the index of their height, the value included is the width
@@ -172,10 +203,10 @@ cuda.all_sync
 circle_detect_r_l[blockspergrid, threadsperblock](f_img_array,possible_circles,min_radius,expected_range)
 cuda.all_sync
 #searching for the ones
-possible_circles_r_l = numpy.array([],dtype = numpy.uint8)
+possible_circles_r_l = numpy.array([[0,0]],dtype = numpy.uint8)
 for j in range(480):
     if possible_circles[j] != 0:
-        possible_circles_r_l = numpy.append(possible_circles_r_l,[possible_circles[j],j])
+        possible_circles_r_l = numpy.append(possible_circles_r_l,[[possible_circles[j],j]],axis=0)
 
 #array for all the possible circles to be added to
 #format added to the index of their width, the value included is the height
@@ -184,10 +215,10 @@ cuda.all_sync
 circle_detect_t_b[blockspergrid, threadsperblock](f_img_array,possible_circles,min_radius,expected_range)
 cuda.all_sync
 #searching for the ones
-possible_circles_t_b = numpy.array([],dtype = numpy.uint8)
+possible_circles_t_b = numpy.array([[0,0]],dtype = numpy.uint8)
 for i in range(720):
     if possible_circles[i] != 0:
-        possible_circles_t_b = numpy.append(possible_circles_t_b,[i,possible_circles[i]])
+        possible_circles_t_b = numpy.append(possible_circles_t_b,[[i,possible_circles[i]]],axis=0)
 
 #array for all the possible circles to be added to
 #format added to the index of their width, the value included is the height
@@ -196,25 +227,28 @@ cuda.all_sync
 circle_detect_b_t[blockspergrid, threadsperblock](f_img_array,possible_circles,min_radius,expected_range)
 cuda.all_sync
 #searching for the ones
-possible_circles_b_t = numpy.array([],dtype = numpy.uint8)
+possible_circles_b_t = numpy.array([[0,0]],dtype = numpy.uint8)
 for i in range(720):
     if possible_circles[i] != 0:
-        possible_circles_b_t = numpy.append(possible_circles_b_t,[i,possible_circles[i]])
+        possible_circles_b_t = numpy.append(possible_circles_b_t,[[i,possible_circles[i]]],axis=0)
 
 #finding matching lines
-threads_per_block = len(possible_circles_l_r)*len(possible_circles_r_l)
+
+#reject outlieres
+
+#average
+
 print(possible_circles_l_r)
-print(possible_circles_r_l)
-print(possible_circles_t_b)
-print(possible_circles_b_t)
-if threads_per_block < 1024:
-    #horizontal matching lines
-    cuda.all_sync
-    #matching_lines_h[blockspergrid, threadsperblock](f_img_array,possible_circles,min_radius,expected_range)
-    cuda.all_sync
 
-threads_per_block = len(possible_circles_b_t)*len(possible_circles_t_b)
+point_l = reject_outliers_average(possible_circles_l_r)
+point_r = reject_outliers_average(possible_circles_r_l)
+point_t = reject_outliers_average(possible_circles_t_b)
+point_b = reject_outliers_average(possible_circles_b_t)
 
+i_center = (point_l[0] + point_r[0] + point_t[0] + point_b[0])//4
+j_center = (point_l[1] + point_r[1] + point_t[1] + point_b[1])//4
+
+print(i_center,j_center)
 
 end_time = time.time()
 print(end_time - s_time)
