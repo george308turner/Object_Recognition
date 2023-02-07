@@ -135,193 +135,227 @@ def circle_line_finder(p,dist_max):
                 current_list.append(n)
         l.append(current_list)
     max_point_count = 0
-    max_element = 0
     for i in range(c):
         if len(l[i]) > max_point_count:
-            max_element = i
+            max_element_l = i
             max_point_count = len(l[i])
-    max_point = l[max_element][0]
+
+    for i in range(c):
+        if len(l[i]) >= max_point_count:
+            max_element_r = i
+            max_point_count = len(l[i])
+
+
+    max_point = l[((max_element_l+max_element_r)//2)][0]
     return max_point
 
+def main(center_last_found):
+    #kind of a minimum radius but any circles with a diameter smaller than this could be picked up
+    min_radius = numpy.int16(23)
 
-#kind of a minimum radius but any circles with a diameter smaller than this could be picked up
-min_radius = numpy.int16(23)
+    #the deviation of where the white pixel on the oppposite side of the elipsis can be
+    expected_range = numpy.int8(4)
 
-#the deviation of where the white pixel on the oppposite side of the elipsis can be
-expected_range = numpy.int8(4)
+    white_sensitivity = numpy.uint8(125)
 
-white_sensitivity = numpy.uint8(155)
+    min_contrast = numpy.int16(5300)
 
-min_contrast = numpy.int16(5800)
+    #built for 720 x 480 image
+    camera = VideoCapture(0)
 
-#built for 720 x 480 image
-camera = VideoCapture(0)
-
-#importing and formatting image datatype
-img = get_image(camera)
-img = img.convert("L")
-img_array = numpy.array(img,dtype=numpy.uint8)
-#making the list writable
-img_array.setflags(write=1)
-
-
-#Matching lines horizontal
-#@cuda.jit('void()')
-#def matching_lines_h()
-
-s_time = time.time()
-
-threadsperblock = img.width
-blockspergrid = 1
-
-cuda.all_sync
-colour_filtering[blockspergrid, threadsperblock](img_array, white_sensitivity)
-#end of black and white converstion
-
-#Line Detection
-###############
-f_img_array = copy.deepcopy(img_array)
-
-#vertical line detection
-weighting = numpy.array([[1,2,0,-2,-1],[2,4,0,-4,-2],[3,12,0,-12,3],[2,4,0,-4,-2],[1,2,0,-2,-1]],dtype=numpy.int32)
-cuda.all_sync
-line_detect[blockspergrid, threadsperblock](img_array,weighting,f_img_array,min_contrast)
-cuda.all_sync
-#horizontal line detection
-weighting = numpy.array([[1,2,3,2,1],[2,4,12,4,2],[0,0,0,0,0],[-2,-4,-12,-4,-2],[-1,-2,-3,-2,-1]],dtype=numpy.int32)
-cuda.all_sync
-line_detect[blockspergrid, threadsperblock](img_array,weighting,f_img_array,min_contrast)
-cuda.all_sync
-
-#only required for image output
-#image = Image.fromarray(f_img_array)
-#image.show()
+    #importing and formatting image datatype
+    img = get_image(camera)
+    img = img.convert("L")
+    img_array = numpy.array(img,dtype=numpy.uint8)
+    #making the list writable
+    img_array.setflags(write=1)
 
 
+    #Matching lines horizontal
+    #@cuda.jit('void()')
+    #def matching_lines_h()
 
-threadsperblock = 476
+    s_time = time.time()
 
-#array for all the possible circles to be added to
-#format added to the index of their height, the value included is the width
-possible_circles = numpy.zeros((480), dtype = numpy.uint16)
-cuda.all_sync
-circle_detect_l_r[blockspergrid, threadsperblock](f_img_array,possible_circles,min_radius,expected_range)
-cuda.all_sync
-#searching for the ones
-possible_circles_l_r = numpy.array([[0,0]],dtype = numpy.uint16)
-for j in range(480):
-    if possible_circles[j] != 0:
-        possible_circles_l_r = numpy.append(possible_circles_l_r,[[possible_circles[j],j]],axis=0)
+    threadsperblock = img.width
+    blockspergrid = 1
 
-#array for all the possible circles to be added to
-#format added to the index of their height, the value included is the width
-possible_circles = numpy.zeros((480), dtype = numpy.uint16)
-cuda.all_sync
-circle_detect_r_l[blockspergrid, threadsperblock](f_img_array,possible_circles,min_radius,expected_range)
-cuda.all_sync
-#searching for the ones
-possible_circles_r_l = numpy.array([[0,0]],dtype = numpy.uint16)
-for j in range(480):
-    if possible_circles[j] != 0:
-        possible_circles_r_l = numpy.append(possible_circles_r_l,[[possible_circles[j],j]],axis=0)
+    cuda.all_sync
+    colour_filtering[blockspergrid, threadsperblock](img_array, white_sensitivity)
+    #end of black and white converstion
 
-#array for all the possible circles to be added to
-#format added to the index of their width, the value included is the height
-possible_circles = numpy.zeros((720), dtype = numpy.uint16)
-cuda.all_sync
-circle_detect_t_b[blockspergrid, threadsperblock](f_img_array,possible_circles,min_radius,expected_range)
-cuda.all_sync
-#searching for the ones
-possible_circles_t_b = numpy.array([[0,0]],dtype = numpy.uint16)
-for i in range(720):
-    if possible_circles[i] != 0:
-        possible_circles_t_b = numpy.append(possible_circles_t_b,[[i,possible_circles[i]]],axis=0)
+    #Line Detection
+    ###############
+    f_img_array = copy.deepcopy(img_array)
 
-#array for all the possible circles to be added to
-#format added to the index of their width, the value included is the height
-possible_circles = numpy.zeros((720), dtype = numpy.uint16)
-cuda.all_sync
-circle_detect_b_t[blockspergrid, threadsperblock](f_img_array,possible_circles,min_radius,expected_range)
-cuda.all_sync
-#searching for the ones
-possible_circles_b_t = numpy.array([[0,0]],dtype = numpy.uint16)
-for i in range(720):
-    if possible_circles[i] != 0:
-        possible_circles_b_t = numpy.append(possible_circles_b_t,[[i,possible_circles[i]]],axis=0)
+    #vertical line detection
+    weighting = numpy.array([[1,2,0,-2,-1],[2,4,0,-4,-2],[3,12,0,-12,3],[2,4,0,-4,-2],[1,2,0,-2,-1]],dtype=numpy.int32)
+    cuda.all_sync
+    line_detect[blockspergrid, threadsperblock](img_array,weighting,f_img_array,min_contrast)
+    cuda.all_sync
+    #horizontal line detection
+    weighting = numpy.array([[1,2,3,2,1],[2,4,12,4,2],[0,0,0,0,0],[-2,-4,-12,-4,-2],[-1,-2,-3,-2,-1]],dtype=numpy.int32)
+    cuda.all_sync
+    line_detect[blockspergrid, threadsperblock](img_array,weighting,f_img_array,min_contrast)
+    cuda.all_sync
 
-#finding groups of points
-
-#fix for when top == 0 or any other coordinate
-dist_max = 30
-point_l = circle_line_finder(possible_circles_l_r,dist_max)
-point_r = circle_line_finder(possible_circles_r_l,dist_max)
-point_t = circle_line_finder(possible_circles_t_b,dist_max)
-point_b = circle_line_finder(possible_circles_b_t,dist_max)
-
-
-failed_list = [0,0,0,0]
-
-if point_l[0] == 0:
-    print("Left point failed")
-    failed = True
-    failed_list[0] = 1
-if point_r[0] == 0:
-    print("Right point failed")
-    failed = True
-    failed_list[1] = 1
-if point_t[0] == 0:
-    print("Top point failed")
-    failed = True
-    failed_list[2] = 1
-if point_b[0] == 0:
-    print("Bottum point failed")
-    failed = True
-    failed_list[3] = 1
-
-failed = False
-#center calculations
-if failed_list == [0,0,0,0]:
-    center_x = (point_l[0]+point_r[0]+point_t[0]+point_b[0])//4
-    center_y = (point_l[1]+point_r[1]+point_t[1]+point_b[1])//4
-#if either top or bottum failed
-elif failed_list == [0,0,1,0] or failed_list == [0,0,0,1]:
-    center_y = (point_l[1]+point_r[1])//2
-    #either top or bottum will be 0
-    center_x = (point_r[0]+point_l[0]+point_t[0]+point_b[0])//3
-    
-#if either left or right failed
-elif failed_list == [1,0,0,0] or failed_list == [0,1,0,0]:
-    center_x = (point_t[0] + point_b[0])//2
-    center_y = (point_t[1]+point_b[1]+point_l[1]+point_r[1])//3
-
-#top and bottum failed
-elif failed_list == [0,0,1,1]:
-    center_x = (point_l[0]+point_r[0])//2
-    center_y = (point_l[1]+point_r[1])//2
-
-#left and right failed
-elif failed_list == [1,1,0,0]:
-    center_x = (point_t[0]+point_b[0])//2
-    center_y = (point_t[1]+point_b[1])//2
-
-#top or bottum and left or right
-elif failed_list == [1,0,1,0] or failed_list  == [1,0,0,1] or failed_list == [0,1,1,0] or failed_list == [0,1,0,1]:
-    #either of these will be 0 so sum will be possition
-    center_x = point_t + point_b
-    center_y = point_l + point_r
-else:
-    #for during loop to know when the mug was last detected
-    failed = True
-
-if not(failed):
-    center = (center_x,center_y)
-    center_last_found = time.time()
-    plot_center(center,f_img_array)
-else:
-    print("failed",str(center_last_found))
+    #only required for image output
+    #image = Image.fromarray(f_img_array)
+    #image.show()
 
 
 
+    threadsperblock = 476
+
+    #array for all the possible circles to be added to
+    #format added to the index of their height, the value included is the width
+    possible_circles = numpy.zeros((480), dtype = numpy.uint16)
+    cuda.all_sync
+    circle_detect_l_r[blockspergrid, threadsperblock](f_img_array,possible_circles,min_radius,expected_range)
+    cuda.all_sync
+    #searching for the ones
+    possible_circles_l_r = numpy.array([[0,0]],dtype = numpy.uint16)
+    for j in range(480):
+        if possible_circles[j] != 0:
+            possible_circles_l_r = numpy.append(possible_circles_l_r,[[possible_circles[j],j]],axis=0)
+
+    #array for all the possible circles to be added to
+    #format added to the index of their height, the value included is the width
+    possible_circles = numpy.zeros((480), dtype = numpy.uint16)
+    cuda.all_sync
+    circle_detect_r_l[blockspergrid, threadsperblock](f_img_array,possible_circles,min_radius,expected_range)
+    cuda.all_sync
+    #searching for the ones
+    possible_circles_r_l = numpy.array([[0,0]],dtype = numpy.uint16)
+    for j in range(480):
+        if possible_circles[j] != 0:
+            possible_circles_r_l = numpy.append(possible_circles_r_l,[[possible_circles[j],j]],axis=0)
+
+    #array for all the possible circles to be added to
+    #format added to the index of their width, the value included is the height
+    possible_circles = numpy.zeros((720), dtype = numpy.uint16)
+    cuda.all_sync
+    circle_detect_t_b[blockspergrid, threadsperblock](f_img_array,possible_circles,min_radius,expected_range)
+    cuda.all_sync
+    #searching for the ones
+    possible_circles_t_b = numpy.array([[0,0]],dtype = numpy.uint16)
+    for i in range(720):
+        if possible_circles[i] != 0:
+            possible_circles_t_b = numpy.append(possible_circles_t_b,[[i,possible_circles[i]]],axis=0)
+
+    #array for all the possible circles to be added to
+    #format added to the index of their width, the value included is the height
+    possible_circles = numpy.zeros((720), dtype = numpy.uint16)
+    cuda.all_sync
+    circle_detect_b_t[blockspergrid, threadsperblock](f_img_array,possible_circles,min_radius,expected_range)
+    cuda.all_sync
+    #searching for the ones
+    possible_circles_b_t = numpy.array([[0,0]],dtype = numpy.uint16)
+    for i in range(720):
+        if possible_circles[i] != 0:
+            possible_circles_b_t = numpy.append(possible_circles_b_t,[[i,possible_circles[i]]],axis=0)
+
+    #finding groups of points
+
+    #fix for when top == 0 or any other coordinate
+    dist_max = 30
+    point_l = circle_line_finder(possible_circles_l_r,dist_max)
+    point_r = circle_line_finder(possible_circles_r_l,dist_max)
+    point_t = circle_line_finder(possible_circles_t_b,dist_max)
+    point_b = circle_line_finder(possible_circles_b_t,dist_max)
+
+
+    failed_list = [0,0,0,0]
+
+    if point_l[0] == 0:
+        print("Left point failed")
+        failed = True
+        failed_list[0] = 1
+    if point_r[0] == 0:
+        print("Right point failed")
+        failed = True
+        failed_list[1] = 1
+    if point_t[0] == 0:
+        print("Top point failed")
+        failed = True
+        failed_list[2] = 1
+    if point_b[0] == 0:
+        print("Bottum point failed")
+        failed = True
+        failed_list[3] = 1
+
+    failed = False
+    #center calculations
+    if failed_list == [0,0,0,0]:
+        center_x = (point_l[0]+point_r[0]+point_t[0]+point_b[0])//4
+        center_y = (point_l[1]+point_r[1]+point_t[1]+point_b[1])//4
+        #horizontal diameter
+        diameter_h =  point_r[0] - point_l[0] 
+        #vertical diameter
+        diameter_v = point_b[1] - point_t[1]
+
+    #if either top or bottum failed
+    elif failed_list == [0,0,1,0] or failed_list == [0,0,0,1]:
+        center_y = (point_l[1]+point_r[1])//2
+        #either top or bottum will be 0
+        center_x = (point_r[0]+point_l[0]+point_t[0]+point_b[0])//3
+        #horizontal diameter
+        diameter_h = point_r[0] - point_l[0]
+        #vertical diameter, one of point top or bottum will be 0
+        diameter_v = abs((center_y - (point_t[1]+point_b[1]))) * 2
+        
+    #if either left or right failed
+    elif failed_list == [1,0,0,0] or failed_list == [0,1,0,0]:
+        center_x = (point_t[0] + point_b[0])//2
+        center_y = (point_t[1]+point_b[1]+point_l[1]+point_r[1])//3
+        #horizontal diameter
+        diameter_h = abs((center_x - (point_l[0] + point_r[0]))) * 2
+        #vertical diameter
+        diameter_v = point_b[1] - point_t[1]
+
+    #top and bottum failed
+    elif failed_list == [0,0,1,1]:
+        center_x = (point_l[0]+point_r[0])//2
+        center_y = (point_l[1]+point_r[1])//2
+        #horizontal diameter
+        diameter_h = point_r[0] - point_l[0]
+        #vertical diameter, 0 represents unknown diameter
+        diameter_v = 0
+
+    #left and right failed
+    elif failed_list == [1,1,0,0]:
+        center_x = (point_t[0]+point_b[0])//2
+        center_y = (point_t[1]+point_b[1])//2
+        #horizontal diameter, 0 represents unknown diameter
+        diameter_h = 0
+        #vertical diameter
+        diameter_v = point_b[1] - point_t[1]
+
+    #top or bottum and left or right
+    elif failed_list == [1,0,1,0] or failed_list  == [1,0,0,1] or failed_list == [0,1,1,0] or failed_list == [0,1,0,1]:
+        #either of these will be 0 so sum will be possition
+        #will not be exact but should help with longer range
+        center_x = point_t[0] + point_b[0]
+        center_y = point_l[1] + point_r[1]
+        #horizontal diameter
+        diameter_h = abs((center_x - (point_l[0] + point_r[0]))) * 2
+        #vertical diameter, one of point top or bottum will be 0
+        diameter_v = abs((center_y - (point_t[1]+point_b[1]))) * 2
+    else:
+        #for during loop to know when the mug was last detected
+        failed = True
+
+    if not(failed):
+        center = (center_x,center_y)
+        center_last_found = time.time()
+        #plot_center(center,f_img_array)
+        print(center)
+        print(diameter_v, diameter_h)
+    else:
+        print("failed",str(center_last_found))
+
+while True:
+    main(center_last_found)
 
 end_time = time.time()
-print(end_time - s_time)
+print(end_time - loop_start_time)
